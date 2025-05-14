@@ -1,0 +1,21 @@
+[project]
+name = "ratelimit"
+version = "0.1.0"
+description = "An HTTP service rate limiter based on the one described in System Design Interview by Xu"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "starlette>=0.46.2",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+]
+
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "session"

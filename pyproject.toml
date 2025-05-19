@@ -11,11 +11,53 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "pre-commit>=4.2.0",
+    "pyright>=1.1.400",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
+    "ruff>=0.11.10",
 ]
 
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_default_fixture_loop_scope = "session"
+
+
+[tool.ruff]
+# Set the maximum line length to 79.
+line-length = 79
+
+[tool.ruff.lint]
+extend-select = ["E501"]
+select = [
+    "ASYNC", # flake8-async: check for async/await syntax
+    "D",     # pydocstyle: check docstring style
+    "E",     # pycodestyle: errors
+    "F",     # pyflakes: detect various errors
+    "I",     # isort: check import order
+    "ICN",   # flake-8 import conventions,
+    "INT",   # flake8-gettext
+    "LOG",   # flake8-logging-format: check for logging format,
+    "Q",     # flake8-quotes
+    "RSE",   # flake8-raise, use raise statements instead of return statements
+    "TID",   # flake8-tidy-imports: check import tidiness
+    "UP",    # pyupgrade: check for Python syntax updates
+    "W",     # pycodestyle: warnings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test/*" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+
+[tool.ruff.lint.isort]
+known-first-party=["ratelimit"]
+
+[tool.pyright]
+include = ["ratelimit/**", "test/**"]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+pythonPlatform = "All" # Include linux, mac, windows

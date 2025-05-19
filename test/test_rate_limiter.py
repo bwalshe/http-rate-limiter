@@ -1,16 +1,23 @@
 import pytest
-
 from starlette.testclient import TestClient
+
 from ratelimit.middleware import RateLimiter
 
 
 def test_rate_limit_pass_through(website):
-    def allow_all(key, time): return True
+    """If our rate limiting algorithm doesn't block the client, then
+    trafic should pass through unchanged
+    """
+
+    def allow_all(key, time):
+        return True
 
     limiter = RateLimiter(website, allow_all)
 
-    with TestClient(website) as direct_client, \
-            TestClient(limiter) as limiter_client:
+    with (
+        TestClient(website) as direct_client,
+        TestClient(limiter) as limiter_client,
+    ):
         url = "/"
         direct_result = direct_client.get(url)
         limiter_result = limiter_client.get(url)
@@ -19,7 +26,13 @@ def test_rate_limit_pass_through(website):
 
 
 def test_rate_limit_response_code(website):
-    def always_fail(key, time): return False
+    """If the algorithm blocks the client, then they should receive a
+    429 code.
+    """
+
+    def always_fail(key, time):
+        return False
+
     limiter = RateLimiter(website, always_fail)
 
     with TestClient(limiter) as client:
@@ -28,6 +41,10 @@ def test_rate_limit_response_code(website):
 
 
 def test_rate_limit_id_fn(website):
+    """Supplying a key function in the constructor allows us to identify
+    clients using that function.
+    """
+
     def is_10(i, _):
         return i == "10"
 

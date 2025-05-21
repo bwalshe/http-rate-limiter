@@ -3,7 +3,15 @@
 These are intended for use with the ratelimit.middleware.RateLimiter class.
 """
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Optional
+
+
+@dataclass
+class _Bucket:
+    tokens: int
+    last_update: datetime
 
 
 class TokenBucket:
@@ -18,17 +26,31 @@ class TokenBucket:
     in their bucket, they may not use the resource.
     """
 
-    def __init__(self, capacity=10, rate=1):
+    def __init__(
+        self,
+        capacity: int = 10,
+        rate: int = 1,
+        memory_days: Optional[int] = None,
+    ):
         """Initialise a set of buckets with the given capacity and refresh rate.
 
         Args:
             capacity: The maximum number of tokens in a single bucket.
-            rate: The number of seconds to wait before increasing the
-                  token count in each bucket.
+            rate_seconds: The number of seconds to wait before increasing the
+                          token count in each bucket.
+            memory_days: The number of days to remember each client. Must be greater than zero
+
         """  # noqa: E501
+        if memory_days is None:
+            self._memory_days = None
+        elif memory_days < 1:
+            raise ValueError("memory_days must be greater than zero.")
+        else:
+            self._memory_days = timedelta(days=memory_days)
         self._capacity = capacity
         self._rate = rate
         self._buckets = dict()
+        self._last_cleanup = None
 
     def __len__(self) -> int:
         """The number of buckets being used."""
@@ -45,9 +67,28 @@ class TokenBucket:
             True if the client has permission to access the resource,
             False otherwise.
         """
-        capacity, last_update = self._buckets.get(key, (self._capacity, time))
-        top_up = int((time - last_update).total_seconds() / self._rate)
-        capacity = min(capacity + top_up, self._capacity) - 1
-        last_update = time if top_up > 0 else last_update
-        self._buckets[key] = (capacity, last_update)
-        return capacity >= 0
+        bucket = self._get_bucket(key, time)
+        top_up = int((time - bucket.last_update).total_seconds() / self._rate)
+        tokens = min(bucket.tokens + top_up, self._capacity) - 1
+        self._buckets[key] = _Bucket(tokens, time)
+        self._clear_old(time)
+        return tokens >= 0
+
+    def _get_bucket(self, key, time):
+        bucket = self._buckets.get(key)
+        if bucket:
+            return bucket
+        return _Bucket(self._capacity, time)
+
+    def _clear_old(self, time):
+        if not self._memory_days:
+            return
+        if self._last_cleanup is None:
+            self._last_cleanup = time
+        if time - self._last_cleanup >= self._memory_days:
+            self._buckets = {
+                k: v
+                for k, v in self._buckets.items()
+                if time - v.last_update < self._memory_days
+            }
+            self._last_cleanup = time

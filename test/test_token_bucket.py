@@ -45,3 +45,13 @@ def test_token_bucket_limits_rate():
     assert bucket(key, t)
     assert not bucket(key, t)
     assert bucket(key, t + dt)
+
+
+def test_memory_one_day():
+    bucket = TokenBucket(memory_days=1)
+    bucket(b"A", datetime(2001, 1, 1, 1))
+    assert len(bucket) == 1
+    bucket(b"B", datetime(2001, 1, 1, 2))
+    assert len(bucket) == 2
+    bucket(b"B", datetime(2001, 1, 2, 1))
+    assert len(bucket) == 1

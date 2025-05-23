@@ -3,9 +3,9 @@
 These are intended for use with the ratelimit.middleware.RateLimiter class.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
 
 
 @dataclass
@@ -29,8 +29,8 @@ class TokenBucket:
     def __init__(
         self,
         capacity: int = 10,
-        rate: int = 1,
-        memory_days: Optional[int] = None,
+        rate_seconds: int = 1,
+        memory_days: int | None = None,
     ):
         """Initialise a set of buckets with the given capacity and refresh rate.
 
@@ -48,9 +48,10 @@ class TokenBucket:
         else:
             self._memory_days = timedelta(days=memory_days)
         self._capacity = capacity
-        self._rate = rate
+        self._rate = rate_seconds
         self._buckets = dict()
         self._last_cleanup = None
+        self._logger = logging.getLogger(__name__)
 
     def __len__(self) -> int:
         """The number of buckets being used."""
@@ -81,6 +82,8 @@ class TokenBucket:
         return _Bucket(self._capacity, time)
 
     def _clear_old(self, time):
+        self._logger.info("Token Bucket cleanup started.")
+        start = datetime.now()
         if not self._memory_days:
             return
         if self._last_cleanup is None:
@@ -92,3 +95,8 @@ class TokenBucket:
                 if time - v.last_update < self._memory_days
             }
             self._last_cleanup = time
+        duration = datetime.now() - start
+        self._logger.info(
+            "Token Bucket cleanup finished. "
+            f"Cleanup operation took {duration.total_seconds()} seconds."
+        )

@@ -1,5 +1,6 @@
 """Rate limiting ASGI middleware."""
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 
@@ -47,6 +48,7 @@ class RateLimiter:
         self._algorithm = algorithm
         self._key_fn = key_fn
         self._limit_response = Response("Limit Exceded", status_code=429)
+        self._logger = logging.getLogger(__name__)
 
     def _get_key(self, scope):
         return self._key_fn(scope)
@@ -63,6 +65,7 @@ class RateLimiter:
         if scope["type"] == "http":
             key = self._get_key(scope)
             if not self._algorithm(key, datetime.now()):
+                self._logger.info("Request blocked for exceding rate limit.")
                 await self._limit_response(scope, receive, send)
                 return
         await self._app(scope, receive, send)

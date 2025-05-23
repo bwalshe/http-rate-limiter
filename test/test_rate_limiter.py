@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from starlette.testclient import TestClient
 
@@ -61,3 +63,13 @@ def test_rate_limit_id_fn(website):
         assert user_1_response.status_code == 429
         user_10_response = client.get(url, params={"user_id": "10"})
         assert user_10_response.status_code == 200
+
+
+def test_rate_limit_logs_block(website, caplog):
+    def always_fail(key, time):
+        return False
+
+    limiter = RateLimiter(website, always_fail)
+    with caplog.at_level(logging.INFO), TestClient(limiter) as client:
+        client.get("/")
+        assert "blocked" in caplog.text

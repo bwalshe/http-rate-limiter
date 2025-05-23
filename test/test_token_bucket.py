@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from ratelimit.algorithm import TokenBucket
@@ -55,3 +56,12 @@ def test_memory_one_day():
     assert len(bucket) == 2
     bucket(b"B", datetime(2001, 1, 2, 1))
     assert len(bucket) == 1
+
+
+def test_clean_up_logging(caplog):
+    bucket = TokenBucket(memory_days=1)
+    bucket(b"A", datetime(2001, 1, 1, 1))
+    with caplog.at_level(logging.INFO):
+        bucket(b"A", datetime(2001, 1, 10, 1))
+        assert "Token Bucket cleanup started" in caplog.text
+        assert "Token Bucket cleanup finished" in caplog.text

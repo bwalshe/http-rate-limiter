@@ -1,12 +1,18 @@
 import logging
 
 import pytest
-from starlette.testclient import TestClient
 
 from ratelimit.middleware import RateLimiter
 
 
-def test_rate_limit_pass_through(website):
+def make_scope(key, value):
+    scope = {"type": "http"}
+    scope[key] = value
+    return scope
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_pass_through(mocker):
     """If our rate limiting algorithm doesn't block the client, then
     trafic should pass through unchanged
     """
@@ -14,62 +20,97 @@ def test_rate_limit_pass_through(website):
     def allow_all(key, time):
         return True
 
-    limiter = RateLimiter(website, allow_all)
+    app = mocker.AsyncMock(return_val=None)
+    limiter = RateLimiter(app, allow_all)
+    scope = make_scope("client", ("host", 1))
+    receive = mocker.Mock(return_val=None)
+    send = mocker.Mock(return_val=None)
 
-    with (
-        TestClient(website) as direct_client,
-        TestClient(limiter) as limiter_client,
-    ):
-        url = "/"
-        direct_result = direct_client.get(url)
-        limiter_result = limiter_client.get(url)
-        assert direct_result.status_code == limiter_result.status_code
-        assert direct_result.text == limiter_result.text
+    await limiter(scope, receive, send)
+
+    app.assert_called_with(scope, receive, send)
+    receive.assert_not_called()
+    send.assert_not_called()
 
 
-def test_rate_limit_response_code(website):
-    """If the algorithm blocks the client, then they should receive a
-    429 code.
+@pytest.mark.asyncio
+async def test_rate_limit_blocks(mocker):
+    """If our rate limiting algorithm blocks the client, then
+    the wrapped appp should not be called
     """
 
-    def always_fail(key, time):
+    def allow_none(key, time):
         return False
 
-    limiter = RateLimiter(website, always_fail)
+    app = mocker.AsyncMock(return_val=None)
+    limiter = RateLimiter(app, allow_none)
+    scope = make_scope("client", ("host", 1))
+    receive = mocker.AsyncMock(return_val=None)
+    send = mocker.AsyncMock(return_val=None)
 
-    with TestClient(limiter) as client:
-        response = client.get("/")
-        assert response.status_code == 429
+    await limiter(scope, receive, send)
+
+    app.assert_not_called()
+    send.assert_called()
 
 
-def test_rate_limit_id_fn(website):
+@pytest.mark.asyncio
+async def test_rate_limit_only_blocks_http(mocker):
+    """The rate limiter should only affect http traffic, and it does not
+    care if the client key is missing from the scope in this case
+    """
+
+    def allow_none(key, time):
+        return False
+
+    key_fn = mocker.AsyncMock(return_val=None)
+    app = mocker.AsyncMock(return_val=None)
+    limiter = RateLimiter(app, allow_none, key_fn)
+    scope = {"type": "stream"}
+    receive = mocker.AsyncMock(return_val=None)
+    send = mocker.AsyncMock(return_val=None)
+
+    await limiter(scope, receive, send)
+
+    app.assert_called_with(scope, receive, send)
+    key_fn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_id_fn(mocker):
     """Supplying a key function in the constructor allows us to identify
     clients using that function.
     """
 
     def is_10(i, _):
-        return i == "10"
+        return i == b"10"
 
     def get_user_id(scope):
-        query = scope["query_string"].decode()
-        return query.split("=")[1]
+        return scope["user_id"]
 
-    limiter = RateLimiter(website, is_10, get_user_id)
-    with TestClient(limiter) as client:
-        url = "/"
-        with pytest.raises(Exception):
-            client.get(url)
-        user_1_response = client.get(url, params={"user_id": "1"})
-        assert user_1_response.status_code == 429
-        user_10_response = client.get(url, params={"user_id": "10"})
-        assert user_10_response.status_code == 200
+    app = mocker.AsyncMock(return_val=None)
+    limiter = RateLimiter(app, is_10, key_fn=get_user_id)
+    receive = mocker.AsyncMock(return_val=None)
+    send = mocker.AsyncMock(return_val=None)
+
+    await limiter(make_scope("user_id", b"1"), receive, send)
+    app.assert_not_called()
+
+    await limiter(make_scope("user_id", b"10"), receive, send)
+    app.assert_called()
 
 
-def test_rate_limit_logs_block(website, caplog):
+@pytest.mark.asyncio
+async def test_rate_limit_logs_block(mocker, caplog):
     def always_fail(key, time):
         return False
 
-    limiter = RateLimiter(website, always_fail)
-    with caplog.at_level(logging.INFO), TestClient(limiter) as client:
-        client.get("/")
-        assert "blocked" in caplog.text
+    app = mocker.AsyncMock(return_val=None)
+    limiter = RateLimiter(app, always_fail)
+    receive = mocker.AsyncMock(return_val=None)
+    send = mocker.AsyncMock(return_val=None)
+    scope = make_scope("client", ("localhost", 1))
+
+    with caplog.at_level(logging.INFO):
+        await limiter(scope, receive, send)
+        assert "blocked" in caplog.text.lower()

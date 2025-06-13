@@ -76,3 +76,57 @@ is a standard for implementing web apps in Python which use async-aware
 web servers. By implementing my limiter using ASGI, I then have the option of
 attaching it directly to a Python web app, or using it as part of an API
 gateway that proxies out to other services.
+
+The basic structure of an ASGI app is very simple. You just have to
+implement a function with the following signature
+
+```Python
+async def application(scope, receive, send):
+   ...
+```
+
+Where:
+  * **scope** is a dictionary object containing information about
+    the request. For example the HTTP query string, the headers
+    information about the client, etc. In a short lived request,
+    most of the information will be in this object.
+  * **receive** is an awaitable function which allows the app
+    to poll for more data from the client in a long lived request
+  * **send** another awaitable function which is used to send a
+    response back to the client.
+
+Implementing a proxy middleware is very straightforward. If `app` is
+a ASGI app, then a proxy could be implemented as follows:
+
+```Python
+async def proxy(scope, receive, send):
+  app(scope, receive, send)
+```
+
+Here, any time `proxy(...)` is called, it just forwards the details to `app`
+without touching anything.
+
+The rate-limiter is essentially just a proxy that does a check before deciding
+to forward the request, or end the connection and return a 429 to the client. A
+very rough implementation might look like this:
+
+```Python
+async def rate_limit(scope, receive, send):
+  if is_within_limit(scope):
+    app(scope, receive, send)
+  else await send(LimitRateError())
+```
+
+Here, the magic `is_within_limit(scipe:dict) -> bool` first checks the `scope`
+object to determine who the client is, and then checks if this particular
+client is still under their limit. If the client is under their limit, then the
+app is proxied. If not then `send` function is used to send an error message
+back to the client.
+
+I like this solution because it is conceptually very simple, but when combined
+with an ASGI compatible server like [Uvicorn](https://www.uvicorn.org/), it
+should scale up well to the number of users that we are expecting. The two main
+issues we will face are that first, the `is_within_limit` function must return
+quickly, as this would block the event loop, and secondly we will need to be
+careful about how much memory we use as the ASGI app could be running in the
+same process as the app it is protecting.

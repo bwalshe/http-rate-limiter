@@ -26,9 +26,11 @@ wanted to practice were:
    have been better.
 
 With all that said, let's look at what I did and try to give it a bit of a
-review. I'll start by describing the basic idea of what a rate-limiter is and
-the broad details of how I have addressed the problem. Then I will say a bit
-about the project setup, before going into some details of the code.
+review. **This write-up is still a work in progress, with a bit of an abrupt
+end right now**, but the planned layout is to start by describing the basic
+idea of what a rate-limiter is and the broad details of how I have addressed
+the problem. Then I will go into some details about the details of the code
+and the project setup.
 
 ## Rate Limiting
 Rate limiting is a fairly simple concept. If we have a service, we may wish to

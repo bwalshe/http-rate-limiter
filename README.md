@@ -29,8 +29,8 @@ With all that said, let's look at what I did and try to give it a bit of a
 review. **This write-up is still a work in progress, with a bit of an abrupt
 end right now**, but the planned layout is to start by describing the basic
 idea of what a rate-limiter is and the broad details of how I have addressed
-the problem. Then I will go into some details about the details of the code
-and the project setup.
+the problem. Then I will go into some detail about the code and the project
+setup.
 
 ## Rate Limiting
 Rate limiting is a fairly simple concept. If we have a service, we may wish to
@@ -202,3 +202,16 @@ but ff you are in a production environment and your users' legitimate requests
 are being blocked from accessing your service, you will be really glad of
 having nice clear indicators that allow you to either identify or rule out this
 particular component being the cause of the problem.
+
+### Dealing with time
+One thing you might notice is that the algorithm object requires the time to be
+pass to it in when it is called. It's full signature is
+`Callable[[bytes, datetime], bool]`, I could have made the interface simpler and
+instead made it `Callable[[bytes], bool]` and had the object figure out the
+current time itself when it was called.
+
+The reason that the time is passed as a parameter is to make testing easier.
+Without it, tests would have to run in real time in order to trigger the correct
+response and this is difficult to set up and manage. It could also mean that the
+tests take much longer to run as you would have to wait a few seconds for the
+correct amount of time to pass, and tests usually run in fractions of a second.
